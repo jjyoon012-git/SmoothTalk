@@ -7,7 +7,7 @@ import re  # ← 추가
 st.set_page_config(page_title="다음 멘트 추천 (Ollama)", page_icon="💬")
 st.title("💬 다음 멘트 추천 (Ollama)")
 
-''' 사용한 모델 list (SEP 1 업뎃) '''
+#사용한 모델 list (SEP 1 업뎃)
 # qwen3_cpu:latest                                           
 # qwen3:8b                                                    
 # smooth:latest                                               
