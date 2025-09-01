@@ -7,9 +7,17 @@ import re  # ← 추가
 st.set_page_config(page_title="다음 멘트 추천 (Ollama)", page_icon="💬")
 st.title("💬 다음 멘트 추천 (Ollama)")
 
+# qwen3_cpu:latest                                           
+# qwen3:8b                                                    
+# smooth:latest                                               
+# EEVE-Korean-10.8B:latest                                   
+# hf.co/heegyu/EEVE-Korean-Instruct-10.8B-v1.0-GGUF:Q4_K_M    
+# llama3.1:8b                                               
+# gemma3:4b ----
+
 with st.sidebar:
     st.markdown("### 설정")
-    MODEL = st.text_input("모델명", value="llama3.1:8b")  # 대화형은 보통 :instruct 권장
+    MODEL = st.text_input("모델명", value="EEVE-Korean-10.8B:latest")  # 대화형은 보통 :instruct 권장
     N = st.slider("제안 개수", 3, 5, 3, 1)
     TEMP = st.slider("temperature", 0.0, 1.5, 0.7, 0.1)
     if st.button("세션 초기화"):
@@ -33,6 +41,34 @@ def ensure_model_exists(name: str) -> bool:
     except Exception:
         st.error(f"❌ 모델이 없습니다: `{name}`\n- `ollama list`로 확인\n- 필요 시 `ollama pull {name}`")
         return False
+    
+import re
+
+def clean_model_output(text: str) -> str:
+    """
+    모델이 reasoning(생각)이나 진단용 태그를 노출할 때를 대비해 안전하게 제거한다.
+    - <think> ... </think>
+    - /think, /no_think (단독 라인 or 문장 중 포함)
+    - <tool_call> ... </tool_call> (혹시 템플릿에 있을 때)
+    - 불필요한 마커 여백 정리
+    """
+    if not text:
+        return text
+
+    # 1) <think> 블록 제거 (개행 포함, 대/소문자 무시)
+    text = re.sub(r'(?is)<\s*think\s*>.*?<\s*/\s*think\s*>', '', text)
+
+    # 2) /think, /no_think 토큰 제거 (라인 단독/문장 내 둘 다 커버)
+    text = re.sub(r'(?im)^\s*/\s*(?:no_)?think\s*$', '', text)  # 단독 라인
+    text = re.sub(r'/\s*(?:no_)?think\b', '', text)             # 문장 중 포함
+
+    # 3) (옵션) tool_call 블록 제거
+    text = re.sub(r'(?is)<\s*tool_call\s*>.*?<\s*/\s*tool_call\s*>', '', text)
+
+    # 4) 남은 태그/마커 여백 정리
+    text = re.sub(r'\n{3,}', '\n\n', text).strip()
+    return text
+
 
 # ✅ 로그를 "이름 - 내용"으로 정규화
 def normalize_dialog(text: str) -> str:
@@ -99,7 +135,9 @@ if user_log:
                 ],
                 options={"temperature": float(TEMP), "num_ctx": 4096},
             )
-            text = res["message"]["content"].replace("\\n", "\n").strip()
+            # ▼▼▼ 추가: thinking/툴콜 등 제거 ▼▼▼
+            raw = res["message"]["content"].replace("\\n", "\n").strip()
+            text = clean_model_output(raw)
 
             # 라인 정리
             lines = [
